@@ -1,0 +1,18 @@
+#
+# To Do list for ELIPS 
+#
+
+0. Unit tests
+1. Retire operation support (work in engine)
+2. Garbage Collection
+    2.1. Introduce life time for WME
+    2.2. Elaborate eviction policies
+    2.3. Implement GC server
+3. Elaborate more optimal architecture of a Working Memory (WM) 
+    Note: It seems it is a good idea to have an explicit 
+    Alpha memory (AM) as a separated ETS where each fact 
+    have an integer index. Beta memory (BM) in this case 
+    contains tokens as a lists of integers.
+4. Its probably a good idea to have a clauses args reversed 
+   (work in builder) to avoid lists:reverse or ++ operations in engine. 
+     
