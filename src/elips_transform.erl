@@ -46,14 +46,14 @@ parse_transform(Forms, _Options) ->
 
 % Export alpha_nodes/0 & beta_node/1
 handle_form(#attribute{type=export,value=List}=Form, Acc) ->
-    case lists:member({handle_pattern,2}, List) of 
+    case lists:member({handle_pattern,3}, List) of 
         true ->
             {Form#attribute{type=export,value=List++[{alpha_nodes,0},{beta_node,1}]},Acc};
         false -> 
             {Form,Acc}
     end;
 % Analyze handle_pattern/2
-handle_form(#function{name=handle_pattern, arity=2}=Form, Acc) ->
+handle_form(#function{name=handle_pattern, arity=3}=Form, Acc) ->
     {Form, dict:store(make_result, elips_builder:make(Form), Acc)};
 handle_form(Form, Acc) ->
     {Form, Acc}.

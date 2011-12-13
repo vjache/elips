@@ -32,7 +32,7 @@
 %%
 -export([start/0, notify/1]).
 -export([init/1,
-         handle_pattern/2,
+         handle_pattern/3,
          handle_event/3,
          handle_info/2, 
          code_change/3, 
@@ -70,17 +70,17 @@ init(_Args) ->
 % @doc
 % Handle pattern matched at Working Memory of this elips process.
 % @end
--spec handle_pattern(Token :: [term()], State :: term() ) ->  elips:ok_reply() | noop.
+-spec handle_pattern(Token :: [term()], WMO :: elips:wmo(term()), State :: term() ) ->  elips:ok_reply() | noop.
 handle_pattern( 
      [{_A,has,_B},
       {_B,has,_C},
-      {_C,is_a,dog}]=P, _State) ->
-    ?ECHO({'HANDLE-PATTERN', P}),
+      {_C,is_a,dog}]=P, {assert,_}=_WMO, _State) ->
+    ?ECHO({'HANDLE-PATTERN-ASSERT',_WMO, P}),
     noop;
 handle_pattern(
      [#person{age=Age},
       {_B,has,_C},
-      {_C,is_a,dog}]=P, _State) when Age > 3 ->
+      {_C,is_a,dog}]=P, _, _State) when Age > 3 ->
     ?ECHO({'HANDLE-PATTERN', P}), 
     noop.
 
@@ -88,6 +88,9 @@ handle_pattern(
 % Handle an event & do some Working Memory updates.
 % @end
 -spec handle_event(Event :: term(), FromPid :: pid(), State :: term() ) ->  elips:ok_reply() | noop.
+handle_event({'-',_Event}, _FromPid, _State) ->
+    ?ECHO({'-HANDLE-EVENT', _Event}),
+    {ok,_State,[{retire, _Event}]};
 handle_event(_Event, _FromPid, _State) ->
     ?ECHO({'HANDLE-EVENT', _Event}),
     {ok,_State,[{assert, _Event}]}. 

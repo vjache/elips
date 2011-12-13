@@ -4,7 +4,7 @@
 
 -record(person,{sex}).
 
--export([handle_pattern/2]).
+-export([handle_pattern/3]).
 
 
 %%=============================
@@ -13,15 +13,15 @@
 
 handle_pattern(
 	[{X, has_father, Y},
-	 {Y, has_father, Z}], State) when X>2 ->
+	 {Y, has_father, Z}], _, State) when X>2 ->
 	assert({X, has_grand_father, Z});
 handle_pattern(
         [{X, has_father, Y},
-         {Y, has_mother, Z}]=P, State)->
+         {Y, has_mother, Z}]=P, _, State)->
         assert({X, has_grand_mother, Z});
 handle_pattern(
         [{X, has_father, Y},
-         {Y, has_child, #person{sex=S}=Z}], State) when X=/=Z ->
+         {Y, has_child, #person{sex=S}=Z}], _, State) when X=/=Z ->
 	if S == male ->
 		assert({X, has_brother, Z});
 	   S == female ->

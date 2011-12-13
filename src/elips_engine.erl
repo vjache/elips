@@ -30,14 +30,14 @@
 %%
 %% Exported Functions
 %%
--export([assert/2]).
+-export([handle_wmo/2]).
 
 %%
 %% API Functions
 %%
 
--spec assert(WME :: term(), Env :: term()) -> [term()] .
-assert(WME, Env) ->
+-spec handle_wmo({assert | retire, WME :: term()}, Env :: term()) -> [term()] .
+handle_wmo({_Op,WME}=WMO, Env) ->
     % Get matching nodes
     case match_anodes(WME, Env) of
         [] -> [];
@@ -46,30 +46,34 @@ assert(WME, Env) ->
             lists:flatten(
               [begin
                    BNode=get_bnode(BNodeId ,Env),
-                   join_right_bnode(BNode, WME, Env)
+                   join_right_bnode(BNode, WMO, Env)
                end || #anode{bnode_ids=BNodeIds} <- MatchedANodes, BNodeId <- BNodeIds])
     end.
 
-join_right_bnode(#bnode{id=Id,right_key_fun=RightKeyFun}=BNode, WME, Env) ->
+join_right_bnode(#bnode{id=Id,right_key_fun=RightKeyFun}=BNode, {_Op,WME}=WMO, Env) ->
     ?ECHO(join_right_bnode),
     Key=RightKeyFun(WME),
-    store_right_index(Id, Key, WME, Env),
-    FetchedTokens=fetch_left_index(Id, Key, Env),
-    NewTokens=[ new_token(WME, T) || T <- FetchedTokens],
-    downstream_tokens(BNode, NewTokens, Env).
+    case modify_right_index(Id, Key, WMO, Env) of
+        false -> % WM not modified
+            [];
+        true -> % WM modified
+            FetchedTokens=fetch_left_index(Id, Key, Env),
+            NewTokens=[ new_token(WME, T) || T <- FetchedTokens],
+            downstream_tokens(BNode, _Op, NewTokens, Env)
+    end.
 
-join_left_bnode(#bnode{id=Id,left_key_fun=LeftKeyFun}=BNode, Token, Env) ->
+join_left_bnode(#bnode{id=Id,left_key_fun=LeftKeyFun}=BNode, _Op, Token, Env) ->
     ?ECHO(join_left_bnode),
     Key=LeftKeyFun(Token),
-    store_left_index(Id, Key, Token, Env),
+    modify_left_index(Id, Key, _Op, Token, Env),
     FetchedWMEs=fetch_right_index(Id, Key, Env),
     NewTokens=[ new_token(WME, Token) || WME <- FetchedWMEs],
-    downstream_tokens(BNode, NewTokens, Env).
+    downstream_tokens(BNode, _Op, NewTokens, Env).
 
 new_token(WME, Token) ->
     Token ++ [WME].
 
-downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, Tokens, Env) ->
+downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, _Op, Tokens, Env) ->
     ?ECHO({downstream_tokens, Tokens}),
     % Filter tokens with b-node match critera (e.g. check additional guards before output)
     MatchedTokens=[ T || T <- Tokens, match_token(BNode, T)],
@@ -77,12 +81,12 @@ downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, Tokens, 
     ActResults=
         [begin
              NextBNode=get_bnode(BNodeId,Env),
-             join_left_bnode(NextBNode, Token, Env)
+             join_left_bnode(NextBNode, _Op, Token, Env)
          end || Token <- MatchedTokens, BNodeId <- BNodeIds],
     % Each matched token pass to output nodes (p-nodes) if any
     ActResult=
         if PNodes ->
-               [{atoken, Id, activate_pnode(true, Token, Env)} || Token <- MatchedTokens];
+               [activate_pnode(Id, _Op, true, Token, Env) || Token <- MatchedTokens];
            true ->
                []
         end,
@@ -122,12 +126,12 @@ fetch_right_index(BNodeId, Key, Env) ->
     ?ECHO({fetch_right_index, BNodeId, Key}),
     Env(fetch_right_index, [BNodeId, Key]).
 
-store_left_index(BNodeId, Key, Token, Env) ->
-    ok=Env(store_left_index, [BNodeId, Key, Token]).
+modify_left_index(BNodeId, Key, Op, Token, Env) ->
+    ok=Env(modify_left_index, [BNodeId, Key, Op, Token]).
 
-store_right_index(BNodeId, Key, WME, Env) ->
-    ok=Env(store_right_index, [BNodeId, Key, WME]).
+modify_right_index(BNodeId, Key, {Op, WME}, Env) ->
+    Env(modify_right_index, [BNodeId, Key, Op, WME]).
 
-activate_pnode(PNode, Token, Env) ->
-    Env(activate_pnode, [PNode, Token]).
+activate_pnode(Id, _Op, PNode, Token, Env) ->
+    Env(activate_pnode, [Id, _Op, PNode, Token]).
 

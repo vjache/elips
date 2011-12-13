@@ -45,22 +45,33 @@
 %% API Functions
 %%
 
-make(#function{name=handle_pattern,arity=2,clauses=ClauseList}) ->
+make(#function{name=handle_pattern,arity=3,clauses=ClauseList}) ->
+    ClauseList1=filter_equimatchable_clauses(ClauseList),
     ReteTotal=
         lists:foldl(
           fun(Clause, Rete) ->
                   merge(clause_to_rete(Clause), Rete)
-          end, #rete{}, ClauseList),
+          end, #rete{}, ClauseList1),
     {make_alpha_layer(ReteTotal), make_beta_layer(ReteTotal), ReteTotal}.
 
+filter_equimatchable_clauses(ClauseList) ->
+    lists:reverse(
+      lists:foldl(
+        fun(#clause{args=Args}=C, UniqueR)->
+                case lists:all(fun(A)-> not equimatch(A, Args) end, UniqueR) of
+                    true -> [C | UniqueR];
+                    false -> UniqueR
+                end
+        end, [], ClauseList)).
+
 -spec clause_to_rete(ClauseForm::#clause{}) -> #rete{}.
-clause_to_rete(#clause{args=[#match{left=L,right=R}, _StateForm]}=C) ->
+clause_to_rete(#clause{args=[#match{left=L,right=R}, _LastWMO, _StateForm]}=C) ->
     case {L,R} of
         {#cons{}, #var{}} -> Cons=L;
         {#var{}, #cons{}} -> Cons=R
     end,
-    clause_to_rete(C#clause{args=[Cons, _StateForm]});
-clause_to_rete(#clause{args=[ConsForm, _StateForm],guards=Guards}) ->
+    clause_to_rete(C#clause{args=[Cons, _LastWMO, _StateForm]});
+clause_to_rete(#clause{args=[ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
     % Create a build fun at the beginning to avoid unwanted occasional clash with local variables
     BuildFun=fun(AlphaForm, {#rete{anodes=ANodes,
                                    bnodes=[#bnode{bnode_ids=BIds}=BNode|Tail]}, 
@@ -526,7 +537,7 @@ load_example_form()->
     {ok,B}=file:read_file("src/examples/handle_pattern"),
     S=erlang:binary_to_list(B),
     {ok,T,_}=erl_scan:string(S),
-    {ok,F=#function{name=handle_pattern,arity=2}}=erl_parse:parse_form(T),
+    {ok,F=#function{name=handle_pattern,arity=3}}=erl_parse:parse_form(T),
     F.
 
 make_test() ->

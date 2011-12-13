@@ -3,7 +3,7 @@
 #
 
 0. Unit tests
-1. Retire operation support (work in engine)
+1. Retire operation support (work in engine) [Done]
 2. Garbage Collection
     2.1. Introduce life time for WME
     2.2. Elaborate eviction policies
@@ -15,4 +15,4 @@
     contains tokens as a lists of integers.
 4. Its probably a good idea to have a clauses args reversed 
    (work in builder) to avoid lists:reverse or ++ operations in engine. 
-     
+5. Give access to alpha memory form a call back module      
