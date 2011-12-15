@@ -25,11 +25,45 @@ matching, fortunately Erlang already pattern matching language. And fortunately 
 
 ## Design & implementation notes ##
 
-TBD 
+TBD
 
 ## Usage ##
 
-TBD
+### Integrate library to your project ###
+
+This is a rebar'ized project, so, if you are already using rebar, just insert a reference 
+to this git repo at your rebar.config. Otherwise clone this repo, and run ``erl -make``. 
+To compile your project, ELIPS library must be on ``ERL_LIBS`` to compile your agents or use 
+``-pa`` for ``erlc``:
+ *   ``env ERL_LIBS=path\to\the\elips erlc my_proj\src\myagent.erl``
+ *   ``erlc -pa path\to\the\elips\ebin my_proj\src\myagent.erl``
+
+### Implementing your own agent ###
+
+To create your own ELIPS agent you must create a module say ``myagent``. This module MUST have a 
+set of functions satisfying to some conventions. In Erlang world we say that it is a callback 
+module implementing a behavior ``elips``. Also, module ``myagent`` must use a special parse transform 
+to be augmented with auto generated hidden functions. On practice you must follow these steps:
+
+ *   first of all insert in ``myagent`` directive ``-include_lib("elips/include/elips.hrl").``
+ *   implement functions:
+  *   ``init/1`` - initialize a state of an agent and working memory (WM)
+  *   ``handle_event/3`` - accepts an event sent with elips:notify/2 optionally changes the state and WM  
+  *   ``handle_info/2`` - similar to handle_event/3 but it accepts a system messages and those sent not with elips:notify/2
+  *   ``handle_pattern/3`` - handles a patterns matched against WM i.e. it may be considered as a set of rules
+  *   ``terminate/3`` - handles a termination of an agent process
+  *   ``code_change/3`` - handles an event of code change
+
+To run an agent it is enough to say something like ``elips:start(myagent_1,myagent,[],[])``.
+Copy a ``examples/elips_skeleton.erl`` and rename to ``your_agent_module.erl`` to implement a new agent. 
+
+### Runtime ###
+
+After you perform ``elips:start(myagent_1,myagent,[],[])`` the new process is created and 
+registered with name ``myagent_1`` and initialized with ``myagent``. This process ready 
+to accept events and handle them using ``myagent`` callback module. To send events use 
+``elips:notify(myagent_1, {some_event, with, some, params})``. It is quite similar to 
+standard OTP behavior ``gen_event``. So, each agent is a separate Erlang process.
 
 ## Examples ##
 
