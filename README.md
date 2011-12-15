@@ -43,6 +43,7 @@ This is a rebar'ized project, so, if you are already using rebar, just insert a 
 to this git repo at your rebar.config. Otherwise clone this repo, and run ``erl -make``. 
 To compile your project, ELIPS library must be on ``ERL_LIBS`` to compile your agents or use 
 ``-pa`` for ``erlc``:
+
  *   ``env ERL_LIBS=path\to\the\elips erlc my_proj\src\myagent.erl``
  *   ``erlc -pa path\to\the\elips\ebin my_proj\src\myagent.erl``
 
