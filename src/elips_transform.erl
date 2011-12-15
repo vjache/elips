@@ -60,8 +60,12 @@ handle_form(Form, Acc) ->
 
 final_handle(Forms,Acc) ->
     {value, #eof{line=EofLine}, Forms2}=lists:keytake(eof, 1, Forms),
-    {FuncAlpha,FuncBeta,_}=dict:fetch(make_result, Acc),
-    Forms2 ++ [FuncAlpha, FuncBeta, #eof{line=EofLine}].
+    case dict:find(make_result, Acc) of
+        {ok, {FuncAlpha,FuncBeta,_} } ->
+            Forms2 ++ [FuncAlpha, FuncBeta, #eof{line=EofLine}];
+        error ->
+            throw(not_elips_behavior)
+    end.
 
 %%
 %% Local Functions
