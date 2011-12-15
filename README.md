@@ -25,7 +25,15 @@ matching, fortunately Erlang already pattern matching language. And fortunately 
 
 ## Design & implementation notes ##
 
-TBD
+This library allows to create a so called ELIPS agents. One such an agent is represented by 
+its module which is a callback module for an ELIPS behavior. Also, such a module must use parse 
+transform to be augmented with a couple of functions generated as a result of analysis of rules 
+declared in an agent module. At runtime this module is plugged into a special host process 
+(see elips.erl). This process is capable to accept a messages (or events if you want). 
+The accepted messages are translated to an operations like ``assert`` and ``retire``. These 
+operations modify a working memory of an agent. Working memory implemented using a core Erlang
+module ``ets``. Each agent process have its separated ``ets`` based working memory. When working 
+memory accumulates a data that matches some rule the rule is activated and RHS is executed.    
 
 ## Usage ##
 
