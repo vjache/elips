@@ -5,14 +5,20 @@
 0. Unit tests
 1. Retire operation support (work in engine) [Done]
 2. Garbage Collection
-    2.1. Introduce life time for WME
+    2.1. Introduce life time for Working Memory Element (WME)
     2.2. Elaborate eviction policies
     2.3. Implement GC server
-3. Elaborate more optimal architecture of a Working Memory (WM) 
+    2.4. Implement 'linking' of a facts to processes. 
+         I.e. some asserted fact may have sense only 
+         while some process is alive and must be retired 
+         (or replaced by some other asserts) when process 
+         finishes.
+3. Elaborate more memory effective architecture of a Working Memory (WM) 
     Note: It seems it is a good idea to have an explicit 
     Alpha memory (AM) as a separated ETS where each fact 
     have an integer index. Beta memory (BM) in this case 
     contains tokens as a lists of integers.
 4. Its probably a good idea to have a clauses args reversed 
    (work in builder) to avoid lists:reverse or ++ operations in engine. 
-5. Give access to alpha memory form a call back module      
+5. Give access to alpha memory form a call back module   
+6*. Back tracking & goal satisfaction  
