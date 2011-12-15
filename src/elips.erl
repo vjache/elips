@@ -29,6 +29,7 @@
 
 -include("log.hrl").
 -include("rete.hrl").
+-include("public.hrl").
 
 %% --------------------------------------------------------------------
 %% External exports
@@ -45,21 +46,23 @@
          terminate/2, 
          code_change/3]).
 
--record(state, {estate, emodule, wm_ets}).
+%
+-record(state, 
+        {estate :: any(), 
+         emodule :: atom(), 
+         wm_ets :: ets:tab()}).
 
 %
-% Types
+% Export Types
 %
+-export_type([wmo/0, ok_reply/0]).
 
--export_type([assert/1,retire/1, wmo/1, ok_reply/0]).
-
--type assert(T) :: {assert | '+', T}.
--type retire(T) :: {retire | '-', T}.
--type wmo(T) :: assert(T) | retire(T) .
-
+% Working Memory Operation
+-type wmo() :: #assert{} | #retire{} .
+% A standard reply of some behavior functions
 -type ok_reply() :: {ok, State :: term()} | 
-                    {ok, State :: term(), WMOs :: [wmo(T::term())]} | 
-                    {ok, State :: term(), WMOs :: [wmo(T::term())], Timeout :: non_neg_integer() | infinity}.
+                    {ok, State :: term(), WMOs :: [wmo()]} | 
+                    {ok, State :: term(), WMOs :: [wmo()], Timeout :: non_neg_integer() | infinity}.
 
 %% ====================================================================
 %% External functions
