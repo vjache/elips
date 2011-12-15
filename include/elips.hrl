@@ -1,4 +1,5 @@
 -include_lib("elips/include/rete.hrl").
+-include_lib("elips/include/public.hrl").
 
 -behaviour(elips).
 

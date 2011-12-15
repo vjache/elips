@@ -1,0 +1,2 @@
+-record(assert,{fact :: term()}).
+-record(retire,{fact :: term()}).
