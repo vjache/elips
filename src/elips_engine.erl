@@ -51,7 +51,6 @@ handle_wmo({_Op,WME}=WMO, Env) ->
     end.
 
 join_right_bnode(#bnode{id=Id,right_key_fun=RightKeyFun}=BNode, {_Op,WME}=WMO, Env) ->
-    ?ECHO(join_right_bnode),
     Key=RightKeyFun(WME),
     case modify_right_index(Id, Key, WMO, Env) of
         false -> % WM not modified
@@ -63,7 +62,6 @@ join_right_bnode(#bnode{id=Id,right_key_fun=RightKeyFun}=BNode, {_Op,WME}=WMO, E
     end.
 
 join_left_bnode(#bnode{id=Id,left_key_fun=LeftKeyFun}=BNode, _Op, Token, Env) ->
-    ?ECHO(join_left_bnode),
     Key=LeftKeyFun(Token),
     modify_left_index(Id, Key, _Op, Token, Env),
     FetchedWMEs=fetch_right_index(Id, Key, Env),
@@ -74,7 +72,6 @@ new_token(WME, Token) ->
     Token ++ [WME].
 
 downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, _Op, Tokens, Env) ->
-    ?ECHO({downstream_tokens, Tokens}),
     % Filter tokens with b-node match critera (e.g. check additional guards before output)
     MatchedTokens=[ T || T <- Tokens, match_token(BNode, T)],
     % Each matched token pass to the next b-nodes (i.e. downstreaming)
@@ -98,10 +95,8 @@ match_anodes(WME, Env) ->
 match_anode(#anode{wme_constraint=Constr}, WME) when is_function(Constr, 1) ->
     Constr(WME).
 
-match_token(#bnode{token_constraint=Constr,id=BNodeId}, Token) when is_function(Constr, 1) ->
-    R=Constr(Token),
-    ?ECHO({match_token, BNodeId, Token, R}),
-    R.
+match_token(#bnode{token_constraint=Constr,id=_BNodeId}, Token) when is_function(Constr, 1) ->
+    Constr(Token).
 
     
 %%
@@ -119,11 +114,9 @@ get_anodes(Env) ->
     Env(get_anodes,[]).
 
 fetch_left_index(BNodeId, Key, Env) ->
-    ?ECHO({fetch_left_index, BNodeId, Key}),
     Env(fetch_left_index, [BNodeId, Key]).
 
 fetch_right_index(BNodeId, Key, Env) ->
-    ?ECHO({fetch_right_index, BNodeId, Key}),
     Env(fetch_right_index, [BNodeId, Key]).
 
 modify_left_index(BNodeId, Key, Op, Token, Env) ->
