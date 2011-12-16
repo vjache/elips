@@ -49,7 +49,9 @@ make(#function{name=handle_pattern,arity=3,clauses=ClauseList}) ->
     ClauseList1=filter_equimatchable_clauses(ClauseList),
     ReteTotal=
         lists:foldl(
-          fun(Clause, Rete) ->
+          fun(#clause{args=[#var{}|_]}, Rete) ->
+                  Rete;
+             (Clause, Rete) ->
                   merge(clause_to_rete(Clause), Rete)
           end, #rete{}, ClauseList1),
     {make_alpha_layer(ReteTotal), make_beta_layer(ReteTotal), ReteTotal}.
@@ -71,7 +73,7 @@ clause_to_rete(#clause{args=[#match{left=L,right=R}, _LastWMO, _StateForm]}=C) -
         {#var{}, #cons{}} -> Cons=R
     end,
     clause_to_rete(C#clause{args=[Cons, _LastWMO, _StateForm]});
-clause_to_rete(#clause{args=[ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
+clause_to_rete(#clause{args=[#cons{}=ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
     % Create a build fun at the beginning to avoid unwanted occasional clash with local variables
     BuildFun=fun(AlphaForm, {#rete{anodes=ANodes,
                                    bnodes=[#bnode{bnode_ids=BIds}=BNode|Tail]}, 
@@ -129,7 +131,9 @@ clause_to_rete(#clause{args=[ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
                     {#rete{anodes=[], bnodes=[make_terminal_bnode()]},[]}, 
                     AlphaFormsOredred),
     #rete{anodes=lists:reverse(ANodeList),
-          bnodes=lists:reverse([H#bnode{pnodes=true}|T])}.
+          bnodes=lists:reverse([H#bnode{pnodes=true}|T])};
+clause_to_rete(#clause{args=[#var{}|_]}) ->
+    #rete{}.
 
 %
 % Merge left to right
@@ -137,6 +141,9 @@ clause_to_rete(#clause{args=[ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
 
 -spec merge(#rete{}, #rete{}) -> #rete{} .
 
+merge(#rete{bnodes=[],anodes=[]}=_Path,
+      #rete{bnodes=[],anodes=[]}=_Tree) ->
+    _Tree;
 merge(#rete{}=Path,
       #rete{bnodes=[],anodes=[]}=Tree) ->
     merge(Path,Tree#rete{bnodes=[make_terminal_bnode()]});
