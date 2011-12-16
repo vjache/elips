@@ -23,6 +23,8 @@
 %%
 %% Include files
 %%
+-include_lib("eunit/include/eunit.hrl").
+
 -include_lib("elips/include/elips.hrl").
 -include("victim.hrl").
 -include("log.hrl"). 
@@ -38,14 +40,14 @@
          code_change/3, 
          terminate/2]).
  
--record(state,{}).
+-record(state,{reply_to}).
 
 %% 
 %% API Functions
 %%
 
 start() ->
-    elips:start({local, ?MODULE}, ?MODULE, [], []).
+    elips:start({local, ?MODULE}, ?MODULE, tester, []).
 
 notify(Event) ->
     elips:notify(?MODULE, Event).
@@ -58,9 +60,8 @@ notify(Event) ->
 % Initialize ELIPS state & insert some data to Working Memory (WM).
 % @end
 -spec init( Args :: term() ) -> elips:ok_reply() | ignore.
-init(_Args) ->
-%%     Self=self(),
-    State=#state{},
+init(ReplyPid) ->
+    State=#state{reply_to=ReplyPid},
     {ok, 
      State, []}. 
 %%      [{assert, {Self, is_a, elips} },
@@ -74,25 +75,27 @@ init(_Args) ->
 handle_pattern( 
      [{_A,has,_B},
       {_B,has,_C},
-      {_C,is_a,dog}]=P, {assert,_}=_WMO, _State) ->
-    ?ECHO({'HANDLE-PATTERN-ASSERT',_WMO, P}),
+      {_C,is_a,dog}]=P, #assert{}=_WMO, #state{reply_to=ReplyPid}=_State) ->
+    ReplyPid ! P,
     noop;
-handle_pattern(
+handle_pattern( 
      [#person{age=Age},
       {_B,has,_C},
-      {_C,is_a,dog}]=P, _, _State) when Age > 3 ->
-    ?ECHO({'HANDLE-PATTERN', P}), 
-    noop.
+      {_C,is_a,dog}]=P, _, #state{reply_to=ReplyPid}=_State) when Age > 3 ->
+    ReplyPid ! P,
+    noop;
+handle_pattern(
+    P, _, #state{reply_to=ReplyPid}=_State) -> 
+    ReplyPid ! {retire, P},
+    noop. 
 
 % @doc
 % Handle an event & do some Working Memory updates.
 % @end
 -spec handle_event(Event :: term(), FromPid :: pid(), State :: term() ) ->  elips:ok_reply() | noop.
 handle_event({'-',_Event}, _FromPid, _State) ->
-    ?ECHO({'-HANDLE-EVENT', _Event}),
     {ok,_State,[{retire, _Event}]};
 handle_event(_Event, _FromPid, _State) ->
-    ?ECHO({'HANDLE-EVENT', _Event}),
     {ok,_State,[{assert, _Event}]}. 
 
 % @doc
@@ -119,4 +122,84 @@ code_change(_OldVsn, State, _Extra) ->
 %% Local Functions
 %%=============================================================
 
+%%=============================================================
+%% EUnit Functions
+%%=============================================================
+
+init_per_testcase() ->
+    {ok,SrvPid}=start(),SrvPid.
+end_per_testcase(_InitResult) ->
+    elips:shutdown(?MODULE).
+
+check_victim_alive() ->
+    timer:sleep(30),
+    ?assert(erlang:is_process_alive(whereis(?MODULE))).
+
+receive_result() ->
+    receive
+        Result -> Result
+        after
+            100 ->  throw(timeout)
+    end.
+
+%% ensure_mbox_empty() ->
+%%     receive
+%%         Result -> throw({mbox_not_empty, Result})
+%%         after
+%%             1 ->  ok
+%%     end.
+
+basic_test_() ->
+    {foreach,fun init_per_testcase/0, fun end_per_testcase/1,
+     [fun() ->
+              check_victim_alive(),
+              
+              % Register self as a receiver of 'victim's messages
+              register(tester, self()),
+              
+              %% Do ASSERTs
+              
+              % Send facts to an agent
+              notify({a, has, b}),
+              notify({b, has, c}),
+              notify({c, is_a, dog}),
+              ?assertMatch([{_A,has,_B},{_B,has,_C},{_C,is_a,dog}], 
+                           receive_result()),
+              
+              % Send again & the same. Ensure rule will not be activated
+              notify({a, has, b}),
+              notify({b, has, c}),
+              notify({c, is_a, dog}),
+              ?assertThrow(timeout, receive_result()),
+              
+              % Send facts to an agent for the same pattern but in 'arbitrar' ordered
+              notify({c1, is_a, dog}),
+              notify({a1, has, b1}),
+              notify({b1, has, c1}),
+              ?assertMatch([{_A,has,_B},{_B,has,_C},{_C,is_a,dog}], 
+                           receive_result()),
+              
+              % Send fact that must trigger(activate) a rule due to reuse of data already in WM
+              notify({a2, has, b1}),
+              ?assertMatch([{a2,has,_B},{_B,has,_C},{_C,is_a,dog}], 
+                           receive_result()),
+              
+              %% Do RETIREs
+              
+              % Send fact that must be removed from WM and trigger(activate) a rule due to 
+              notify({'-', {a2, has, b1}}),
+              ?assertMatch({retire, [{a2,has,_B},{_B,has,_C},{_C,is_a,dog}]}, 
+                           receive_result()),
+              
+              % Ensure that previous operation being repeated has no effect
+              notify({'-', {a2, has, b1}}),
+              ?assertThrow(timeout, receive_result()),
+              
+              % Ensure that some 'garbage' operations no effect
+              notify({g, g, g, g}),
+              ?assertThrow(timeout, receive_result()),
+              
+              notify({'-', {g1, g1, g1, g1} }),
+              ?assertThrow(timeout, receive_result())
+      end]}.
 
