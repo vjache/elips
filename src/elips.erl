@@ -14,7 +14,61 @@
 %%% limitations under the License.
 %%%
 %%% @doc
-%%%    TODO: Document it.
+%%%
+%%% The ELIPS agent behavior. The idea behind this module is analogous to 
+%%% 'gen_server' and 'gen_event'. Hence it starts a process that receives 
+%%% a messages (events) and handles them in some way using a provided user 
+%%% callback module. Most of callback functions looks like ones in 
+%%% 'gen_server' or 'gen_event' except 'handle_pattern'. This callback 
+%%% called when in a working memory appears a set of facts that matches one 
+%%% of the rules. More over, rules are actually clauses of handle_pattern.  
+%%%
+%%% The user module should export:
+%%%
+%%%   init(Args)  
+%%%     ==> {ok, State}
+%%%         {ok, State, WorkingMemoryOps}
+%%%         {ok, State, WorkingMemoryOps, Timeout}
+%%%         ignore
+%%%
+%%%   handle_event(Event, FromPid, State)
+%%%
+%%%    ==>  {ok, State}
+%%%         {ok, State, WorkingMemoryOps}
+%%%         {ok, State, WorkingMemoryOps, Timeout}
+%%%         noop
+%%%
+%%%   handle_info(Info, State) Info is e.g. {'EXIT', P, R}, {nodedown, N}, ...
+%%%
+%%%    ==>  {ok, State}
+%%%         {ok, State, WorkingMemoryOps}
+%%%         {ok, State, WorkingMemoryOps, Timeout}
+%%%         noop
+%%%
+%%%   handle_pattern(Pattern, WorkingMemoryOp, State)
+%%%
+%%%    ==>  {ok, State}
+%%%         {ok, State, WorkingMemoryOps}
+%%%         noop
+%%%
+%%%   terminate(Reason, State) Let the user module clean up
+%%%        always called when server terminates
+%%%
+%%%    ==> ok
+%%%
+%%%   The main concept behind these callback functions is:
+%%%     1. client code interacts with ELIPS agent sending events to it using elips:notify/2
+%%%     2. ELIPS agent accepts and interprets events with CallbackModule:handle_event and a 
+%%%       result of such an interpretation may be a set of asserts and/or retires (WMOs)
+%%%     3. The WMOs obtained at the previous step are applied to a working memory
+%%%     4. If some rules match with working memory they become activated and 
+%%%       handled with CallbackModule:handle_pattern. The CallbackModule:handle_pattern may
+%%%       result in its turn with a set of WMOs (asserts and/or retires) again, in this case 
+%%%       all things repeated starting from step 3. etc..
+%%%     5. The CallbackModule:handle_info is like CallbackModule:handle_even but designed 
+%%%        mainly for handling system events like {'EXIT', P, R}, {nodedown, N}, {nodeup, N} etc. 
+%%%        or for those messages that sent not through elips:notify but just with '!'.  
+%%%
 %%% @end
 %%% Created : Nov 20, 2011
 %%%-------------------------------------------------------------------------------
@@ -84,22 +138,33 @@ behaviour_info(callbacks) ->
 behaviour_info(_Other) ->
     undefined.
 
+%% @doc
+%%  Starts an elips agent with specified behavior and links it with process caller.
+%% @end
 start_link(ServerName,
            ElipsBehavior,
            Args,
            Opts) ->
     gen_server:start_link(ServerName, ?MODULE, {ElipsBehavior, Args}, Opts).
 
+%% @doc
+%%  Starts an elips agent with specified behavior.
+%% @end
 start(ServerName,
            ElipsBehavior,
            Args,
            Opts) ->
     gen_server:start(ServerName, ?MODULE, {ElipsBehavior, Args}, Opts).
 
+%% @doc
+%%  Shuts down an elips agent process.
+%% @end
 shutdown(ServerRef) ->
     ok=gen_server:call(ServerRef, shutdown).
 
-
+%% @doc
+%%  Send event to an elips agent.
+%% @end
 notify(ServerRef, Event) ->
     ok=gen_server:cast(ServerRef, {'$elips_event', self(), Event}).
 
