@@ -36,6 +36,7 @@
 -export([start_link/4,
          start/4,
          notify/2,
+         shutdown/1,
          behaviour_info/1]).
 
 %% gen_server callbacks
@@ -95,6 +96,9 @@ start(ServerName,
            Opts) ->
     gen_server:start(ServerName, ?MODULE, {ElipsBehavior, Args}, Opts).
 
+shutdown(ServerRef) ->
+    ok=gen_server:call(ServerRef, shutdown).
+
 
 notify(ServerRef, Event) ->
     ok=gen_server:cast(ServerRef, {'$elips_event', self(), Event}).
@@ -125,6 +129,8 @@ init({Module, Args}) ->
             {stop, {error,[{reason, Reason}, {stacktrace, erlang:get_stacktrace()}]}}
     end.
 
+handle_call(shutdown, _From, State) ->
+    {stop, shutdown, ok, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
