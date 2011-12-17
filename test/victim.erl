@@ -53,7 +53,7 @@ notify(Event) ->
     elips:notify(?MODULE, Event).
 
 %%=============================================================
-%% ELIPS bahavior callbacks
+%% ELIPS behavior callbacks
 %%=============================================================
 
 % @doc
