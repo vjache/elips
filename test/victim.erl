@@ -75,17 +75,19 @@ init(ReplyPid) ->
 handle_pattern( 
      [{_A,has,_B},
       {_B,has,_C},
-      {_C,is_a,dog}]=P, #assert{}=_WMO, #state{reply_to=ReplyPid}=_State) ->
+      {_C,is_a,dog}]=P, 
+     #assert{}, #state{reply_to=ReplyPid}=_State) ->
     ReplyPid ! P,
     noop;
 handle_pattern( 
-     [#person{age=Age},
-      {_B,has,_C},
-      {_C,is_a,dog}]=P, _, #state{reply_to=ReplyPid}=_State) when Age > 3 ->
+     [{_A, on, _B},
+      {_B, on, _C},
+      {_D, near, _E}]=P, 
+     #assert{}, #state{reply_to=ReplyPid}=_State) ->
     ReplyPid ! P,
     noop;
 handle_pattern(
-    P, _, #state{reply_to=ReplyPid}=_State) -> 
+    P, #retire{}, #state{reply_to=ReplyPid}=_State) -> 
     ReplyPid ! {retire, P},
     noop. 
 
@@ -151,7 +153,8 @@ receive_result() ->
 
 basic_test_() ->
     {foreach,fun init_per_testcase/0, fun end_per_testcase/1,
-     [fun() ->
+     [% Test rule with 'connected-by-var' fact patterns
+      fun() ->
               check_victim_alive(),
               
               % Register self as a receiver of 'victim's messages
@@ -201,5 +204,20 @@ basic_test_() ->
               
               notify({'-', {g1, g1, g1, g1} }),
               ?assertThrow(timeout, receive_result())
+      end,
+      % Test rule with 'disconnected-by-var' fact patterns
+      fun() ->
+              check_victim_alive(),
+              
+              % Register self as a receiver of 'victim's messages
+              register(tester, self()),
+              
+              %% Do ASSERTs
+              
+              % Send facts to an agent
+              notify({a, on, b}),
+              notify({b, on, c}),
+              notify({d, near, e}),
+              ?assertMatch([{_A, on, _B},{_B, on, _C},{_D, near, _E}], receive_result())
       end]}.
 
