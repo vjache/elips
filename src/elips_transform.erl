@@ -61,8 +61,8 @@ handle_form(Form, Acc) ->
 final_handle(Forms,Acc) ->
     {value, #eof{line=EofLine}, Forms2}=lists:keytake(eof, 1, Forms),
     case dict:find(make_result, Acc) of
-        {ok, {FuncAlpha,FuncBeta,_} } ->
-            Forms2 ++ [FuncAlpha, FuncBeta, #eof{line=EofLine}];
+        {ok, {FuncAlpha,FuncBeta,FuncP,_} } ->
+            Forms2 ++ [FuncAlpha, FuncBeta, FuncP, #eof{line=EofLine}];
         error ->
             throw(not_elips_behavior)
     end.

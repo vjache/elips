@@ -11,22 +11,29 @@
 %% Functions
 %%=============================
 
+%% handle_pattern(
+%%   [{X, has_father, Y},
+%%    {Y, has_father, Z}], _, State) when X>2 ->
+%%     assert({X, has_grand_father, Z});
+%% handle_pattern(
+%%   [{X, has_father, Y},
+%%    {Y, has_mother, Z}]=P, _, State)->
+%%     assert({X, has_grand_mother, Z});
+%% handle_pattern(
+%%   [{X, has_father, Y},
+%%    {Y, has_child, #person{sex=S}=Z}], _, State) when X=/=Z ->
+%%     if S == male ->
+%%            assert({X, has_brother, Z});
+%%        S == female ->
+%%            assert({X, has_sister, Z})
+%%     end.
+
 handle_pattern(
-	[{X, has_father, Y},
-	 {Y, has_father, Z}], _, State) when X>2 ->
-	assert({X, has_grand_father, Z});
-handle_pattern(
-        [{X, has_father, Y},
-         {Y, has_mother, Z}]=P, _, State)->
-        assert({X, has_grand_mother, Z});
-handle_pattern(
-        [{X, has_father, Y},
-         {Y, has_child, #person{sex=S}=Z}], _, State) when X=/=Z ->
-	if S == male ->
-		assert({X, has_brother, Z});
-	   S == female ->
-		assert({X, has_sister, Z})
-	end.
+  [{X, has_father, Y},
+   {W, has_father, Z},
+   {Y, has_father, M},
+   {W, has_child, Z1}], _, State) ->
+    noop.
 
 assert(_) ->
     ok.

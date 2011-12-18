@@ -47,15 +47,26 @@
 
 make(#function{name=handle_pattern,arity=3,clauses=ClauseList}) ->
     ClauseList1=filter_equimatchable_clauses(ClauseList),
-    ReteTotal=
-        lists:foldl(
-          fun(#clause{args=[#var{}|_]}, Rete) ->
-                  Rete;
-             (Clause, Rete) ->
-                  merge(clause_to_rete(Clause), Rete)
-          end, #rete{}, ClauseList1),
-    {make_alpha_layer(ReteTotal), make_beta_layer(ReteTotal), ReteTotal}.
+    ClauseList2=filter_incoventional_clauses(ClauseList1),
+    ReteTotal=merge_deep(ClauseList2),
+    {make_alpha_layer(ReteTotal), make_beta_layer(ReteTotal), make_p_layer(ReteTotal), ReteTotal}.
 
+merge_deep(ClauseList) ->
+    ReteDeepList=[clause_to_rete(Clause) || Clause <- ClauseList],
+    ReteList=lists:flatten(ReteDeepList),
+    lists:foldl(
+      fun(Rete, ReteAcc) ->
+              merge(Rete, ReteAcc)
+      end, #rete{}, ReteList).
+
+filter_incoventional_clauses(ClauseList) ->
+    IfConventional=
+        fun(#clause{args=[#var{}|_]}) ->
+                false;
+           (_) ->
+                true
+        end,
+    [Clause || Clause <- ClauseList, IfConventional(Clause)].
 filter_equimatchable_clauses(ClauseList) ->
     lists:reverse(
       lists:foldl(
@@ -76,7 +87,7 @@ clause_to_rete(#clause{args=[#match{left=L,right=R}, _LastWMO, _StateForm]}=C) -
 clause_to_rete(#clause{args=[#cons{}=ConsForm, _LastWMO, _StateForm],guards=Guards}) ->
     % Create a build fun at the beginning to avoid unwanted occasional clash with local variables
     BuildFun=fun(AlphaForm, {#rete{anodes=ANodes,
-                                   bnodes=[#bnode{bnode_ids=BIds}=BNode|Tail]}, 
+                                   bnodes=[#bnode{bnode_ids=BIds}=BNode| Tail ]}, 
                              AlphaFormsAcc}) when is_list(BIds) ->
                      % Allocate ids for anode and bnode in advance
                      ANodeIdNew=next(anode_ids),
@@ -114,26 +125,62 @@ clause_to_rete(#clause{args=[#cons{}=ConsForm, _LastWMO, _StateForm],guards=Guar
                             bnodes=[BNodeNew|[BNode#bnode{bnode_ids=[BNodeIdNew|BIds]}|Tail]]},
                       AlphaFormsAcc1}
              end,
-    AlphaForms=[StartForm|_]=cons_to_list(ConsForm),
+    AlphaForms=cons_to_list(ConsForm),
+    case separate_connected_by_var_components(AlphaForms) of
+%%         % There is only one component (all forms connected by vars)
+%%         [AlphaFormsOredred] ->
+%%             {#rete{anodes=ANodeList,
+%%                    bnodes=[H|T]}, _ } = 
+%%                 lists:foldl(BuildFun, 
+%%                             {#rete{anodes=[], bnodes=[make_terminal_bnode()]},[]}, 
+%%                             AlphaFormsOredred),
+%%             #rete{anodes=lists:reverse(ANodeList),
+%%                   bnodes=lists:reverse([H#bnode{pnodes=true}|T])};
+        % Thre are multiple components
+        Components when length(Components) > 0 ->
+            % Build a list of rete's one per component
+            RList=
+                [begin
+                     {R, _ } = 
+                         lists:foldl(BuildFun, 
+                                     {#rete{bnodes=[make_terminal_bnode()]},[]}, 
+                                     Component), R
+                 end || Component <- Components ],
+            % Create pnode with incoming bnode ids
+            HeadBNodeIds=[ BNodeId || #rete{bnodes=[#bnode{id=BNodeId}|_]} <- RList],
+            PNodeIdNew=next(pnode_ids),
+            PNode=#pnode{id=PNodeIdNew,
+                   token_format=make_token_format(Components, ConsForm),
+                   bnode_ids=HeadBNodeIds},
+            % Reverse lists and insert pnode id
+            [#rete{anodes=lists:reverse(ANodeList),
+                   bnodes=lists:reverse([H#bnode{pnodes=[PNodeIdNew]}|T]),
+                   pnodes=[PNode]} || #rete{anodes=ANodeList, bnodes=[H|T]} <- RList]
+    end;
+clause_to_rete(#clause{args=[#var{}|_]}) ->
+    #rete{}.
+
+separate_connected_by_var_components(Forms) ->
+    separate_connected_by_var_components(Forms, []).
+
+separate_connected_by_var_components([], Components) ->
+    Components;
+separate_connected_by_var_components([StartForm|_]=Forms, Components) ->
     GetNeighFun=
         fun(F)->
                 Vars=get_variables(F),
-                [AF || AF <- AlphaForms, 
+                [AF || AF <- Forms, 
                        AF=/=F, 
                        lists:any(fun(V)-> lists:member(V, Vars) end, get_variables(AF))]
-        end,         
+        end,
     % Order alpha forms in such a way that each form in list have 
     % a common variables with preceding alpha forms. Such an order 
     % have better performance versus arbitrary one.
-    AlphaFormsOredred=traverse(StartForm, GetNeighFun, breadth),
-    {#rete{anodes=ANodeList,bnodes=[H|T]},_} = 
-        lists:foldl(BuildFun, 
-                    {#rete{anodes=[], bnodes=[make_terminal_bnode()]},[]}, 
-                    AlphaFormsOredred),
-    #rete{anodes=lists:reverse(ANodeList),
-          bnodes=lists:reverse([H#bnode{pnodes=true}|T])};
-clause_to_rete(#clause{args=[#var{}|_]}) ->
-    #rete{}.
+    Component=traverse(StartForm, GetNeighFun, breadth),
+    separate_connected_by_var_components(
+      [F || F <- Forms, not lists:member(F, Component)], 
+      [Component | Components]).
+    
 
 %
 % Merge left to right
@@ -147,8 +194,8 @@ merge(#rete{bnodes=[],anodes=[]}=_Path,
 merge(#rete{}=Path,
       #rete{bnodes=[],anodes=[]}=Tree) ->
     merge(Path,Tree#rete{bnodes=[make_terminal_bnode()]});
-merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft},
-      #rete{bnodes=[Root|_]=BNodesRight,anodes=ANodesRight}=Tree) ->
+merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft,pnodes=PNodesLeft},
+      #rete{bnodes=[Root|_]=BNodesRight,anodes=ANodesRight,pnodes=PNodesRight}=Tree) ->
     %% Merge beta layers
     GetChildrenFun=
         fun(#bnode{bnode_ids=ChildrenIds})->
@@ -164,12 +211,16 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft},
         end,
     case merge_into_tree(BNodesLeft, Root, GetChildrenFun, EqualFun) of
         % In this case we just mark that tree node have an output (pnodes)
-        {[#bnode{id=Id}=H|_], []} ->
-            BNodesRight1=lists:keyreplace(Id, #bnode.id, BNodesRight, H#bnode{pnodes=true}),
+        {[#bnode{id=Id,pnodes=PIds}=H|_], []} ->
+            #bnode{id=IdL,pnodes=PIdsL}=lists:last(BNodesLeft),
+            % Update pnodes bnode_ids: replace an old bnode id (IdL) with a new one (Id)
+            PNodesLeft1=[ P#pnode{bnode_ids=lists_replace(IdL, Id, BIds)} || #pnode{bnode_ids=BIds}=P <-PNodesLeft],
+            BNodesRight1=lists:keyreplace(Id, #bnode.id, BNodesRight, H#bnode{pnodes=umerge_lists(PIds,PIdsL)}),
             %% Filter out alpha nodes that point to bnodes trunceted after merge of beta layer
             ANodesRight1=ANodesRight;
         % In this case we tailoring a new branch by fixing ids of a tree node
         {[#bnode{id=Id1,bnode_ids=Ids}=H|_], [#bnode{id=Id}|_]=LeftRest} ->
+            PNodesLeft1=PNodesLeft,
             BNodesRight1=lists:keyreplace(Id1, #bnode.id, BNodesRight, H#bnode{bnode_ids=[Id|Ids]})++LeftRest,
             %% Filter out alpha nodes that point to bnodes trunceted after merge of beta layer
             % Dou to alpha node may have multiple pointers to bnodes we firstly remove that 
@@ -177,7 +228,7 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft},
             ANodesLeft1=[ ANL#anode{bnode_ids=[BId||BId <- BIds, lists:keymember(BId, #bnode.id, LeftRest)]} || 
                            #anode{bnode_ids=BIds}=ANL <- ANodesLeft],
             % Then filter out an alpha nodes with empty lists of bnode pointers
-            ANodesRight1= ANodesRight ++ [ N|| N <- ANodesLeft1, length(N#anode.bnode_ids)>0 ]
+            ANodesRight1= ANodesRight ++ [ N || N <- ANodesLeft1, length(N#anode.bnode_ids) > 0 ]
     end,
     %% Merge alpha layers
     % 2. Consider each pair of alpha nodes and construct equivalence grpah 
@@ -201,7 +252,13 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft},
                    Acc#anode{bnode_ids=umerge_lists(Bids, AccBids)}
            end,HAN,Tail) || [HAN|Tail]<-EquimatchComponents],
     % 4. Return resulting rete
-    Tree#rete{bnodes=BNodesRight1,anodes=ANodesRight2}.
+    Tree#rete{bnodes=BNodesRight1,anodes=ANodesRight2,pnodes=umerge_lists(PNodesLeft1,PNodesRight)}.
+
+lists_replace(OldElem, NewElem, List) ->
+    [if OldElem == Elem ->
+            NewElem;
+        true -> Elem
+     end || Elem <- List].
 
 umerge_lists(L1,L2) ->
     lists:umerge(lists:sort(L1), lists:sort(L2)).
@@ -232,6 +289,13 @@ make_token_constraint(TokenForms,Guards,BNodeIdNew) when
             guards=[],
             body=[#atom{name=false}]},
     underscore_vars(?FUN(0,[Clause,Clause_])).
+
+make_token_format(Components, #cons{}=ConsForm) when is_list(Components) ->
+    Clause=
+        #clause{args=[list_to_cons([ list_to_cons(Component) || Component <- Components])],
+            guards=[],
+            body=[ConsForm]},
+    underscore_vars(?FUN(0,[Clause])).
 
 make_left_key_fun(TokenForms,CommonVars) ->
     Clause=
@@ -355,7 +419,7 @@ traverse(GetNeighFun, [V|Tail]=_Stack, Visited, Strategy) ->
     end.
 
 %
-% Helper function to prepare path merge ino tree.
+% Helper function to prepare path merge into tree.
 %
 -spec merge_into_tree(Path :: [T],
                 RootNode :: [T1],
@@ -424,14 +488,14 @@ next(SequenceName) ->
 %
 bnode_to_form(#bnode{id=terminal,
                      bnode_ids=BIds,
-                     pnodes=PNodes,
+                     pnodes=_PNodes,
                      left_key_fun=LKF,
                      right_key_fun=RKF,
                      token_constraint=TC}) ->
     #record{name=bnode,
             fields=[#record_field{name=atomf(id),value=#atom{name=terminal}},
                     #record_field{name=atomf(bnode_ids),value=list_to_cons([#integer{value=I}||I<-BIds])},
-                    #record_field{name=atomf(pnodes),value=#atom{name=PNodes}},
+                    #record_field{name=atomf(pnodes),value=#nil{}},
                     #record_field{name=atomf(left_key_fun),value=#atom{name=LKF}},
                     #record_field{name=atomf(right_key_fun),value=#atom{name=RKF}},
                     #record_field{name=atomf(token_constraint),value=#atom{name=TC}}]};    
@@ -444,7 +508,7 @@ bnode_to_form(#bnode{id=Id,
     #record{name=bnode,
             fields=[#record_field{name=atomf(id),value=#integer{value=Id}},
                     #record_field{name=atomf(bnode_ids),value=list_to_cons([#integer{value=I}||I<-BIds])},
-                    #record_field{name=atomf(pnodes),value=#atom{name=PNodes}},
+                    #record_field{name=atomf(pnodes),value=list_to_cons([#integer{value=I}||I<-PNodes])},
                     #record_field{name=atomf(left_key_fun),value=LKF},
                     #record_field{name=atomf(right_key_fun),value=RKF},
                     #record_field{name=atomf(token_constraint),value=TC}]}.
@@ -457,6 +521,13 @@ anode_to_form(#anode{id=Id,bnode_ids=BIds,wme_constraint=WMEC}) ->
             fields=[#record_field{name=atomf(id),value=#integer{value=Id}},
                     #record_field{name=atomf(bnode_ids),value=list_to_cons([#integer{value=I}||I<-BIds])},
                     #record_field{name=atomf(wme_constraint),value=WMEC}]}.
+
+pnode_to_form(#pnode{id=Id,bnode_ids=BIds,token_format=TF}) ->
+    #record{name=pnode,
+            fields=[#record_field{name=atomf(id),value=#integer{value=Id}},
+                    #record_field{name=atomf(bnode_ids),value=list_to_cons([ #integer{value=I} || I <- BIds ])},
+                    #record_field{name=atomf(token_format),value=TF}]}.
+    
 
 make_beta_layer(#rete{bnodes=BNodes}) ->
     #function{name=beta_node,
@@ -473,6 +544,13 @@ make_alpha_layer(#rete{anodes=ANodes}) ->
               clauses=[#clause{args=[],
                                guards=[],
                                body=[list_to_cons([anode_to_form(ANode) || ANode <- ANodes])]}]}.
+
+make_p_layer(#rete{pnodes=PNodes}) ->
+     #function{name=p_node,
+              arity=1,
+              clauses=[#clause{args=[#integer{value=Id}],
+                               guards=[],
+                               body=[pnode_to_form(PNode)]} || #pnode{id=Id}=PNode <- PNodes]}.
 
 %%=========================================
 %% Test Functions

@@ -21,4 +21,13 @@
 4. Its probably a good idea to have a clauses args reversed 
    (work in builder) to avoid lists:reverse or ++ operations in engine. 
 5. Give access to alpha memory form a call back module   
-6*. Back tracking & goal satisfaction  
+6*. Back tracking & goal satisfaction
+
+Known Bugs
+
+1. LHS patterns not connected by variables i.e. having more that one 
+   connected components by vars are incorrectly handled.
+2. The order of alpha forms in a last beta node may differ from
+   order in original rule LHS pattern, e.g.:
+        [{A,has,B},{C,has,D},{B,has,C}]
+   
