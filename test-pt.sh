@@ -2,4 +2,4 @@
 
 export ERL_LIBS=..\
 
-erlc -I include/ test/victim_0.erl
+erlc -I include/ test/victim.erl

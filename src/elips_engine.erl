@@ -71,7 +71,7 @@ join_left_bnode(#bnode{id=Id,left_key_fun=LeftKeyFun}=BNode, _Op, Token, Env) ->
 new_token(WME, Token) ->
     Token ++ [WME].
 
-downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, _Op, Tokens, Env) ->
+downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodeIds}=BNode, _Op, Tokens, Env) ->
     % Filter tokens with b-node match critera (e.g. check additional guards before output)
     MatchedTokens=[ T || T <- Tokens, match_token(BNode, T)],
     % Each matched token pass to the next b-nodes (i.e. downstreaming)
@@ -81,13 +81,36 @@ downstream_tokens(#bnode{id=Id,bnode_ids=BNodeIds,pnodes=PNodes}=BNode, _Op, Tok
              join_left_bnode(NextBNode, _Op, Token, Env)
          end || Token <- MatchedTokens, BNodeId <- BNodeIds],
     % Each matched token pass to output nodes (p-nodes) if any
-    ActResult=
-        if PNodes ->
-               [activate_pnode(Id, _Op, true, Token, Env) || Token <- MatchedTokens];
-           true ->
-               []
-        end,
+    ActResult=[push_token_to_pnode(Id, _Op, PNodeId, Token, Env) || Token <- MatchedTokens, PNodeId <- PNodeIds],
     [ActResult, ActResults].
+
+push_token_to_pnode(FromBNodeId, WMO, PNodeId, Token, Env) ->
+    PNode=#pnode{bnode_ids=BNodeIds,token_format=TokenFormat}=get_pnode(PNodeId,Env),
+    case BNodeIds of
+        [FromBNodeId] -> % Simple case
+            activate_pnode(FromBNodeId, WMO, PNode, TokenFormat([Token]), Env);
+        [_,_|_] -> % Cartesian product case
+            % 1. Add pnode tokens for bnode data received from
+            IsModified=modify_pnode_tokens(PNodeId, FromBNodeId, WMO, Token, Env), % TODO: It seems we don't 
+                                                                                   % need to analyze whether 
+                                                                                   % the data were modified, 
+                                                                                   % because of this is already 
+                                                                                   % done at alpha layer.   
+            case IsModified of
+                % 2a. In case modification occured read all components for product
+                true ->
+                    % TODO: Optimize. If some fetch results with [] then stop & return []
+                    LLT=[if BNodeId==FromBNodeId -> [Token];
+                            true -> fetch_pnode_tokens(PNodeId, BNodeId, Env)
+                         end || BNodeId <- BNodeIds ],
+                    case lists:any(fun(L)-> L==[] end, LLT) of
+                        true -> [];
+                        false -> activate_pnode(FromBNodeId, WMO, PNode, {cart, TokenFormat, LLT}, Env)
+                    end;
+                % 2b. Token have no effect
+                false -> []
+            end
+    end.
 
 match_anodes(WME, Env) ->
     [ ANode || ANode <- get_anodes(Env), match_anode(ANode, WME)].
@@ -113,17 +136,26 @@ get_bnode(BNodeId,Env) ->
 get_anodes(Env) ->
     Env(get_anodes,[]).
 
+get_pnode(PNodeId,Env) ->
+    Env(get_pnode,[PNodeId]).
+
 fetch_left_index(BNodeId, Key, Env) ->
     Env(fetch_left_index, [BNodeId, Key]).
 
 fetch_right_index(BNodeId, Key, Env) ->
     Env(fetch_right_index, [BNodeId, Key]).
 
+fetch_pnode_tokens(PNodeId, BNodeId, Env) ->
+    Env(fetch_pnode_tokens, [PNodeId, BNodeId]).
+
 modify_left_index(BNodeId, Key, Op, Token, Env) ->
     ok=Env(modify_left_index, [BNodeId, Key, Op, Token]).
 
 modify_right_index(BNodeId, Key, {Op, WME}, Env) ->
     Env(modify_right_index, [BNodeId, Key, Op, WME]).
+
+modify_pnode_tokens(PNodeId, FromBNodeId, Op, Token, Env) ->
+    Env(modify_pnode_tokens, [PNodeId, FromBNodeId, Op, Token]).
 
 activate_pnode(Id, _Op, PNode, Token, Env) ->
     Env(activate_pnode, [Id, _Op, PNode, Token]).

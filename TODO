@@ -23,7 +23,7 @@
 5. Give access to alpha memory form a call back module   
 6*. Back tracking & goal satisfaction
 
-Known Bugs
+Known Bugs [fixed]
 
 1. LHS patterns not connected by variables i.e. having more that one 
    connected components by vars are incorrectly handled.

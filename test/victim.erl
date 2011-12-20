@@ -74,8 +74,8 @@ init(ReplyPid) ->
 -spec handle_pattern(Token :: [term()], WMO :: elips:wmo(term()), State :: term() ) ->  elips:ok_reply() | noop.
 handle_pattern( 
      [{_A,has,_B},
-      {_C,is_a,dog},
-      {_B,has,_C}]=P, 
+      {_B,has,_C},
+      {_C,is_a,dog}]=P, 
      #assert{}, #state{reply_to=ReplyPid}=_State) ->
     ReplyPid ! P,
     noop;
