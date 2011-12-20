@@ -48,7 +48,7 @@ parse_transform(Forms, _Options) ->
 handle_form(#attribute{type=export,value=List}=Form, Acc) ->
     case lists:member({handle_pattern,3}, List) of 
         true ->
-            {Form#attribute{type=export,value=List++[{alpha_nodes,0},{beta_node,1}]},Acc};
+            {Form#attribute{type=export,value=List++[{alpha_nodes,0},{beta_node,1},{p_node,1}]},Acc};
         false -> 
             {Form,Acc}
     end;
