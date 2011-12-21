@@ -86,6 +86,21 @@ handle_pattern(
      #assert{}, #state{reply_to=ReplyPid}=_State) ->
     ReplyPid ! P,
     noop;
+handle_pattern( 
+     [{_F2, has_dog, _D},
+      {_A, has_friend, _B},
+      {_B, has_fname, _F},
+      {_B, has_lname, _F1},
+      {_A, has_fname, _C},
+      {_B, has_friend, _F2},
+      {_A, has_lname, _E}]=P, 
+     #assert{}, #state{reply_to=ReplyPid}=_State) when _A=/=_B ->
+    try ReplyPid ! P
+    catch
+        _:badarg ->
+            throw({noproc, ReplyPid})
+    end,
+    noop;
 handle_pattern(
     P, #retire{}, #state{reply_to=ReplyPid}=_State) -> 
     ReplyPid ! {retire, P},
@@ -130,8 +145,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 init_per_testcase() ->
     {ok,SrvPid}=start(),SrvPid.
-end_per_testcase(_InitResult) ->
-    elips:shutdown(?MODULE).
+end_per_testcase(SrvPid) ->
+    elips:shutdown(?MODULE),
+    MRef=monitor(process, SrvPid),
+    receive 
+        {'DOWN', MRef, process, SrvPid, _Info} ->
+            ok
+    end.
 
 check_victim_alive() ->
     timer:sleep(30),
@@ -144,12 +164,12 @@ receive_result() ->
             100 ->  throw(timeout)
     end.
 
-%% ensure_mbox_empty() ->
-%%     receive
-%%         Result -> throw({mbox_not_empty, Result})
-%%         after
-%%             1 ->  ok
-%%     end.
+ensure_mbox_empty() ->
+    receive
+        Result -> throw({mbox_not_empty, Result})
+        after
+            1 ->  ok
+    end.
 
 basic_test_() ->
     {foreach,fun init_per_testcase/0, fun end_per_testcase/1,
@@ -203,7 +223,9 @@ basic_test_() ->
               ?assertThrow(timeout, receive_result()),
               
               notify({'-', {g1, g1, g1, g1} }),
-              ?assertThrow(timeout, receive_result())
+              ?assertThrow(timeout, receive_result()),
+              
+              ensure_mbox_empty()
       end,
       % Test rule with 'disconnected-by-var' fact patterns
       fun() ->
@@ -218,6 +240,68 @@ basic_test_() ->
               notify({a, on, b}),
               notify({b, on, c}),
               notify({d, near, e}),
-              ?assertMatch([{_A, on, _B},{_B, on, _C},{_D, near, _E}], receive_result())
+              ?assertMatch([{_A, on, _B},{_B, on, _C},{_D, near, _E}], receive_result()),
+              
+              % Ensure no effect when assert already asserted
+              notify({d, near, e}),
+              ?assertThrow(timeout, receive_result()),
+              
+              % Send facts to an agent
+              notify({a1, on, b}),
+              ?assertMatch([{a1, on, _B},{_B, on, _C},{_D, near, _E}], receive_result()),
+              
+              % Retire facts to an agent
+              notify({'-', {d, near, e}}),
+              ?assertMatch({retire, [{_A, on, _B},{_B, on, _C}, {d, near, e}]}, 
+                           receive_result()),
+              ?assertMatch({retire, [{_A, on, _B},{_B, on, _C}, {d, near, e}]}, 
+                           receive_result()),
+              
+              ensure_mbox_empty()
+      end,
+      % Test rule with pattern that traversed by 'elips_builder' in another order than in declaration (pnode format test)
+      fun() ->
+              check_victim_alive(),
+              
+              % Register self as a receiver of 'victim's messages
+              register(tester, self()),
+              
+              %% Do ASSERTs
+              Facts=[ {a, has_friend, b},
+                      {b, has_fname, f},
+                      {f2, has_dog, d}, % Send this fact not in order as in pattern declaration
+                      {b, has_lname, f1},
+                      {a, has_fname, c},
+                      {b, has_friend, f2},
+                      {a, has_lname, e}],
+              % Send facts to an agent
+              [notify(Fact) || Fact <- Facts],
+              ?assertMatch([{_F2, has_dog, _D},
+                            {_A, has_friend, _B},
+                            {_B, has_fname, _F},
+                            {_B, has_lname, _F1},
+                            {_A, has_fname, _C},
+                            {_B, has_friend, _F2},
+                            {_A, has_lname, _E}], receive_result()),
+              
+              ensure_mbox_empty(),
+              
+               % Retire one fact
+              notify({'-', {a, has_friend, b}}),
+              
+              ?assertMatch({retire, [{_F2, has_dog, _D},
+                            {_A, has_friend, _B},
+                            {_B, has_fname, _F},
+                            {_B, has_lname, _F1},
+                            {_A, has_fname, _C},
+                            {_B, has_friend, _F2},
+                            {_A, has_lname, _E}]}, receive_result()),
+              
+              ensure_mbox_empty(),
+              
+              % Retire all facts
+              [notify({'-', Fact}) || Fact <- Facts],
+              
+              ensure_mbox_empty()
       end]}.
 
