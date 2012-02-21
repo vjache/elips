@@ -44,8 +44,8 @@ to this git repo at your rebar.config. Otherwise clone this repo, and run ``erl 
 To compile your project, ELIPS library must be on ``ERL_LIBS`` to compile your agents or use 
 ``-pa`` for ``erlc``:
 
- *   ``env ERL_LIBS=path\to\the\elips erlc my_proj\src\myagent.erl``
- *   ``erlc -pa path\to\the\elips\ebin my_proj\src\myagent.erl``
+ *   ``env ERL_LIBS=path/to/the/elips erlc my_proj/src/myagent.erl``
+ *   ``erlc -pa path/to/the/elips/ebin my_proj/src/myagent.erl``
 
 ### Implementing your own agent ###
 
