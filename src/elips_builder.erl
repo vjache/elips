@@ -195,7 +195,7 @@ merge(#rete{}=Path,
       #rete{bnodes=[],anodes=[]}=Tree) ->
     merge(Path,Tree#rete{bnodes=[make_terminal_bnode()]});
 merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft,pnodes=PNodesLeft},
-      #rete{bnodes=[Root|_]=BNodesRight,anodes=ANodesRight,pnodes=PNodesRight}=Tree) ->
+      #rete{bnodes=[Root|_]=BNodesRight,anodes=ANodesRight,pnodes=PNodesRight,bnodes_map=BNodeChangeMap}=Tree) ->
     %% Merge beta layers
     GetChildrenFun=
         fun(#bnode{bnode_ids=ChildrenIds})->
@@ -213,6 +213,8 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft,pnodes=PNodesLeft},
         % In this case we just mark that tree node have an output (pnodes)
         {[#bnode{id=Id,pnodes=PIds}=H|_], []} ->
             #bnode{id=IdL,pnodes=PIdsL}=lists:last(BNodesLeft),
+            BNodeChangeMap1=[{IdL, Id}|BNodeChangeMap],
+%%             io:format("~p~n",[{'BNODE',IdL,'->',Id}]),
             % Update pnodes bnode_ids: replace an old bnode id (IdL) with a new one (Id)
             PNodesLeft1=[ P#pnode{bnode_ids=lists_replace(IdL, Id, BIds)} || #pnode{bnode_ids=BIds}=P <-PNodesLeft],
             BNodesRight1=lists:keyreplace(Id, #bnode.id, BNodesRight, H#bnode{pnodes=umerge_lists(PIds,PIdsL)}),
@@ -220,7 +222,9 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft,pnodes=PNodesLeft},
             ANodesRight1=ANodesRight;
         % In this case we tailoring a new branch by fixing ids of a tree node
         {[#bnode{id=Id1,bnode_ids=Ids}=H|_], [#bnode{id=Id}|_]=LeftRest} ->
+%%             io:format("~p~n",[{'BNODE-BRANCH',Id1}]),
             PNodesLeft1=PNodesLeft,
+            BNodeChangeMap1=BNodeChangeMap,
             BNodesRight1=lists:keyreplace(Id1, #bnode.id, BNodesRight, H#bnode{bnode_ids=[Id|Ids]})++LeftRest,
             %% Filter out alpha nodes that point to bnodes trunceted after merge of beta layer
             % Dou to alpha node may have multiple pointers to bnodes we firstly remove that 
@@ -252,7 +256,32 @@ merge(#rete{bnodes=BNodesLeft,anodes=ANodesLeft,pnodes=PNodesLeft},
                    Acc#anode{bnode_ids=umerge_lists(Bids, AccBids)}
            end,HAN,Tail) || [HAN|Tail]<-EquimatchComponents],
     % 4. Return resulting rete
-    Tree#rete{bnodes=BNodesRight1,anodes=ANodesRight2,pnodes=umerge_lists(PNodesLeft1,PNodesRight)}.
+%%     DBG=[{PL,PR}||#pnode{id=X}=PL<-PNodesLeft1,#pnode{id=X1}=PR<-PNodesRight,X==X1,PL=/=PR],
+%%     io:format("~p~n",[{'CLASH!',DBG}]),
+    BNodesRight2=apply_bnode_map(BNodeChangeMap1,BNodesRight1),
+    ANodesRight3=apply_bnode_map(BNodeChangeMap1,ANodesRight2),
+    PNodes=apply_bnode_map(BNodeChangeMap1,ukeymerge_lists(#pnode.id,PNodesLeft1,PNodesRight)),
+    Tree#rete{bnodes=BNodesRight2,anodes=ANodesRight3,pnodes=PNodes,bnodes_map=BNodeChangeMap1}.
+
+apply_bnode_map(_BNodeChangeMap,[])->
+    [];
+apply_bnode_map([],Nodes)->
+    Nodes;
+apply_bnode_map(BNodeChangeMap,Nodes)->
+    Map=fun(Ids) ->
+                [follow_map(Id, BNodeChangeMap)||Id <- Ids]
+        end,
+    [case Node of
+         #pnode{bnode_ids=Ids} -> Node#pnode{bnode_ids=Map(Ids)};
+         #anode{bnode_ids=Ids} -> Node#anode{bnode_ids=Map(Ids)};
+         #bnode{bnode_ids=Ids} -> Node#bnode{bnode_ids=Map(Ids)}
+     end || Node <- Nodes].
+
+follow_map(Id, BNodeChangeMap) ->
+    case lists:keyfind(Id, 1, BNodeChangeMap) of
+        false -> Id;
+        {Id, NextId} -> follow_map(NextId, BNodeChangeMap)
+    end.
 
 lists_replace(OldElem, NewElem, List) ->
     [if OldElem == Elem ->
@@ -262,6 +291,9 @@ lists_replace(OldElem, NewElem, List) ->
 
 umerge_lists(L1,L2) ->
     lists:umerge(lists:sort(L1), lists:sort(L2)).
+
+ukeymerge_lists(N,L1,L2) ->
+    lists:ukeymerge(N, lists:keysort(N, L1), lists:keysort(N,L2)).
 
 make_terminal_bnode() ->
     #bnode{id=terminal,bnode_ids=[]}.
