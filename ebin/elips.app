@@ -10,5 +10,5 @@
   {registered, []},
   {build_dependencies, []},
   {env, []},
-  {applications, [kernel, stdlib, sasl]},
-  {mod, {rete_app, []}}]}.
+  {applications, [kernel, stdlib, sasl]}
+  ]}.
