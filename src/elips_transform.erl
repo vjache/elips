@@ -36,10 +36,10 @@
 %%
 
 parse_transform(Forms, _Options) ->
-    io:format("AST-BEFORE: ~p ~n",[Forms]),
+%%     io:format("AST-BEFORE: ~p ~n",[Forms]),
     {Forms1, Acc1}=lists:mapfoldl(fun handle_form/2, dict:new(), Forms),
     Forms2=final_handle(Forms1,Acc1),
-    io:format("AST-AFTER: ~p ~n",[Forms2]),
+%%     io:format("AST-AFTER: ~p ~n",[Forms2]),
     io:format("== RESULT CODE ==~n~n~s~n",
               [erl_prettypr:format(erl_syntax:form_list(Forms2))]),
     Forms2.
